@@ -1,25 +1,25 @@
 # Product Requirements — Recipes Are For Sharing
 
 ## Problem
-Family recipes, stories, and traditions disappear when the people who hold them are gone. There is no simple, beautiful way to capture a recipe *and* the memory behind it, and share both with the people who matter.
+Family recipes, stories, and food traditions disappear when older generations do. There is no simple way for a non-technical person to preserve a recipe *and* the memory behind it in one shareable place.
 
 ## Target User
-Families, home cooks, parents, grandparents, and food enthusiasts who want to preserve something before it is lost.
+Families, home cooks, grandparents, parents, and food enthusiasts who want to honour a culinary tradition before it is lost.
 
 ## Core Object
-**Recipe Memory** — a single page combining a recipe, a personal story, a photo, and an author name, accessible via a shareable URL.
+**Recipe Memory** — a single page combining a recipe (photo, title, method/ingredients) with the personal story or family tradition behind it, accessible via a public URL.
 
-## MVP Must-Haves
-- [ ] Homepage with hero section, 'Preserve a Recipe' CTA, and sample recipe memories
+## MVP Checklist (v1 must-haves)
+- [ ] Homepage with hero headline, "Preserve a Recipe" CTA, and sample recipe memories
 - [ ] Create Recipe Memory form: photo upload, recipe title, recipe details, memory/story, author name
-- [ ] Form persists to database on submit
-- [ ] Auto-generated Recipe Memory page at a unique shareable URL
-- [ ] Recipe Memory page shows photo, recipe, story, author, and share link
-- [ ] Share link copy button
-- [ ] All pages viewable without login
+- [ ] Form persists to database on submit — no dead buttons
+- [ ] Auto-generated public `/memory/[id]` page showing all fields
+- [ ] Shareable URL visible on the recipe memory page
+- [ ] Works for anonymous visitors — no login required
+- [ ] Loading, empty, and error states handled on every screen
 
 ## Non-Goals (v1)
-Social network, comments, likes, follows, user accounts, mobile apps, payments, AI recommendations, meal planning, family archives, email integrations.
+Social network, comments, likes, following, user accounts (Sprint 1–2), mobile apps, marketplace, payments, AI recommendations, meal planning, family archives, external integrations.
 
 ## Success Criteria
-A first-time visitor lands on the homepage, clicks 'Preserve a Recipe', fills in the form, hits Generate, and receives a shareable URL — all within 3 minutes. They copy the link and send it to a family member who can view the full recipe memory page without any account.
+A first-time visitor arrives at the homepage, clicks "Preserve a Recipe", fills in the form (with a photo), hits Generate, and lands on a shareable `/memory/[id]` URL — all within 3 minutes, with no account required. Pass = the URL opens the correct recipe memory on a second device.

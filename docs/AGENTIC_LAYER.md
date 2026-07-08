@@ -1,27 +1,31 @@
-# Agentic Layer — Recipes Are For Sharing
+# Agentic Layer
 
-## v1: No Agents
-All actions are direct user actions. No automated agents in v1.
+## v1 — No Agentic Actions
+v1 is a simple create-and-share tool. All writes are direct user actions.
 
-## Action Risk Registry
+## Risk Register (for later sprints)
 
-| Action | Risk Level | v1? | Approval |
-|---|---|---|---|
-| Save recipe memory to DB | Low | ✅ | Auto (user submits form) |
-| Upload photo to Storage | Low | ✅ | Auto |
-| Copy share link | Low | ✅ | Auto |
-| AI story embellishment draft | Low | Later | Auto-draft, user reviews |
-| Send share email to family member | Medium | Later | User confirms before send |
-| Delete recipe memory | High | Later | Owner confirms |
-| Bulk export / archive all memories | High | Later | Owner confirms |
+### Low risk — auto-execute
+- **Suggest story improvements:** AI rewrites a draft story for warmth/length. Value + source + confidence + review_status stored. User accepts or discards.
+- **Auto-tag cuisine type:** rule-based keyword match on `recipe_details`.
+
+### Medium risk — show draft, user approves
+- **Email memory to a recipient:** draft email preview shown; user clicks Send.
+- **Generate PDF:** system drafts layout, user downloads after preview.
+
+### High risk — explicit user confirmation required
+- **Delete a recipe memory:** confirmation modal required; soft-delete with 30-day recovery window.
+
+### Critical — human only (never automated)
+- Permanent deletion of user data
+- Any action that touches data belonging to another user
 
 ## Named Tools (later)
-- `enhance_story(memory_story: string) → draft_text` — calls LLM, returns draft only
-- `send_share_email(to: string, memory_id: uuid)` — sends one email after user confirms
-- `delete_memory(memory_id: uuid)` — only callable by owner, logged
+- `supabase.storage.upload` — photo upload (v1 already)
+- `openai.chat.complete` — story suggestion
+- `resend.send_email` — share by email
 
-## Audit Log Fields (for all meaningful actions, later)
-- `id`, `user_id`, `action`, `object_type`, `object_id`, `payload_snapshot`, `created_at`
+## Audit Log Fields (later)
+`id`, `action`, `actor_user_id`, `target_id`, `target_table`, `payload_json`, `created_at`
 
-## Principle
-Agent inherits the logged-in user's permissions. No action executes without the owning user's identity. Every non-trivial mutation is logged.
+Every meaningful write (create, delete, AI suggestion accepted) appended — never updated.

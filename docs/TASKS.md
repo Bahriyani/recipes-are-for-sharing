@@ -1,71 +1,72 @@
-# Tasks — Recipes Are For Sharing
+# Tasks & Sprints
 
-## Sprint 1 — Database & Core Engine
-**Goal:** The one core action works end-to-end: create a recipe memory, persist it, view it at a unique URL.
+## Sprint 1 — Database + Core Recipe Memory Engine
+**Goal:** A visitor can create a recipe memory and land on a live shareable URL backed by real data.
 
-- [ ] Create `recipe_memories` table (migration SQL)
-- [ ] Create `recipe-photos` Supabase Storage bucket (public)
-- [ ] Seed 4 demo recipe memories with real photo URLs
-- [ ] Build `/create` page with form: photo upload, title, details, story, author name
-- [ ] Wire photo upload to Supabase Storage → store public URL
-- [ ] Wire form submit → INSERT into `recipe_memories`
-- [ ] On success, navigate to `/memory/[id]`
-- [ ] Build `/memory/[id]` page: reads row by id, renders photo, recipe, story, author
-- [ ] Confirm full create → save → view flow works against live DB
+- [ ] Run migration SQL — `recipe_memories` table, RLS v1 open policies, 5 seed rows
+- [ ] Supabase Storage bucket `recipe-photos` — public read
+- [ ] `/create` page: photo upload field, recipe title, recipe details, memory/story, author name, Generate button
+- [ ] Photo uploads to Supabase Storage on form submit → returns `photo_url`
+- [ ] Form `INSERT`s into `recipe_memories` on submit — real DB write
+- [ ] On success redirect to `/memory/[id]`
+- [ ] `/memory/[id]` page: fetch row by id, display photo, title, details, story, author, share URL
+- [ ] Loading skeleton on `/memory/[id]`
+- [ ] 404 / error state if `id` not found
+- [ ] Inline form validation: required fields, file type, max 10 MB
 
-**Definition of Done:** A tester fills the form, submits, and lands on a real rendered memory page with their data. The row exists in Supabase.
-
----
-
-## Sprint 2 — Homepage & Share Flow ✦ v1 functional milestone
-**Goal:** The app is demoable from the homepage. Sharing works.
-
-- [ ] Build `/` homepage: hero copy, 'Preserve a Recipe' button → `/create`
-- [ ] Sample memories grid on homepage pulls live rows from `recipe_memories`
-- [ ] Share link copy button on `/memory/[id]` with 'Copied!' confirmation
-- [ ] Loading skeleton states on homepage grid and memory page
-- [ ] Empty state on homepage if no memories yet
-- [ ] Error state if memory id not found
-- [ ] Success screen after create with share link displayed
-
-**Definition of Done:** Anonymous visitor completes the full journey — homepage → create → memory page → copy link — in under 3 minutes. ✦ **v1 functional**
+**Definition of Done:** Fill the form on `/create`, hit Generate, arrive at `/memory/[id]` URL that displays all entered data including the uploaded photo. Open that URL in a second browser tab — it loads correctly.
 
 ---
 
-## Sprint 3 — Polish & Emotional Design
-**Goal:** The app feels warm, trustworthy, and share-worthy.
+## Sprint 2 — Homepage & Demo Showcase
+**Goal:** Anonymous visitor lands on a working homepage that shows real recipe memories and links to create one.
 
-- [ ] Styled memory page: full-bleed photo hero, recipe block, story block, author line
-- [ ] Form validation with human-friendly error messages
-- [ ] Mobile-responsive layouts on all pages
-- [ ] `og:image`, `og:title`, `og:description` meta tags on memory pages (rich link previews)
-- [ ] Favicon and page `<title>` tags
-- [ ] Typography and colour palette conveying warmth/family
+- [ ] `/` homepage: hero headline, sub-headline, "Preserve a Recipe" CTA button → `/create`
+- [ ] Fetch all `recipe_memories` ordered by `created_at desc` — display as cards (photo thumbnail, title, author)
+- [ ] Each card links to `/memory/[id]`
+- [ ] Loading skeleton for card grid
+- [ ] Empty state: "Be the first to preserve a recipe" with CTA
+- [ ] Responsive grid layout (1 col mobile, 3 col desktop)
 
-**Definition of Done:** Memory page looks beautiful on mobile. Sharing the URL in iMessage shows a rich preview card.
-
----
-
-## Sprint 4 — Lock It Down (Auth + Ownership)
-**Goal:** Real users can own, edit, and delete their memories. Open policies replaced.
-
-- [ ] Add Supabase Auth (email/password)
-- [ ] Sign-up and login pages
-- [ ] Attach `user_id` to new `recipe_memories` on create (when logged in)
-- [ ] Replace v1 open RLS policies with owner-scoped write policies
-- [ ] My Recipes page `/my-recipes` — lists user's own memories
-- [ ] Edit memory page (owner only)
-- [ ] Delete memory (owner only, confirm dialog)
-- [ ] Unauthenticated users can still view any memory page (SELECT stays public)
-
-**Definition of Done:** User A cannot edit User B's memory. All write paths require auth. Shareable memory pages still load without login.
+**Definition of Done:** Homepage loads with 5 seeded cards for anonymous visitor. Clicking a card opens the memory page. Clicking CTA opens the create form.
 
 ---
 
-## Gantt (sprint → feature)
+## Sprint 3 — Share UX, OG Previews & Polish ✅ v1 FUNCTIONAL MILESTONE
+**Goal:** Sharing actually works — the link previews correctly and the end-to-end journey is polished.
+
+- [ ] Copy-to-clipboard button on `/memory/[id]` with success toast
+- [ ] Open Graph meta tags on `/memory/[id]`: `og:title`, `og:description`, `og:image` (photo_url)
+- [ ] Photo upload progress bar
+- [ ] Character counter on `memory_story` (encourage ≥ 100 words)
+- [ ] Error toast on failed form submission
+- [ ] Finalise mobile-responsive layout on all pages
+- [ ] Manual test of full end-to-end journey (see TEST_PLAN.md)
+
+**Definition of Done:** Share link copied on mobile. Pasted into iMessage / WhatsApp — preview shows recipe photo and title. Recipient taps link and reads the full memory page.
+
+---
+
+## Sprint 4 — Lock It Down (Auth + Per-User Ownership)
+**Goal:** Creators own their memories; others cannot edit or delete them.
+
+- [ ] Enable Supabase Auth — email magic link (+ optional Google OAuth)
+- [ ] Login / signup pages at `/login`
+- [ ] Capture `auth.uid()` as `user_id` on `INSERT` when user is logged in
+- [ ] Replace open RLS write policy with `auth.uid() = user_id` for `insert/update/delete`; keep `select` open
+- [ ] `/my-memories` dashboard — list logged-in user's memories with edit / delete
+- [ ] Delete confirmation modal (soft-delete or hard-delete with confirmation)
+- [ ] Redirect anonymous users from `/my-memories` to `/login`
+- [ ] Regression test: public `/memory/[id]` URLs still work without login
+
+**Definition of Done:** User A cannot delete User B's memory (403 returned). `/memory/[id]` loads without login. User A's dashboard shows only their memories.
+
+---
+
+## Gantt (approximate)
 ```
-Sprint 1: DB schema, seed data, create form, memory page
-Sprint 2: Homepage, share button, loading/error states  ← v1 functional
-Sprint 3: Polish, mobile, OG meta, emotional design
-Sprint 4: Auth, ownership, RLS lock-down, edit/delete
+Sprint 1 — Week 1:   DB + core create/view engine
+Sprint 2 — Week 1:   Homepage + demo cards
+Sprint 3 — Week 2:   Share UX + OG + polish  ← v1 functional
+Sprint 4 — Week 2+:  Auth + lock-down (before real users)
 ```

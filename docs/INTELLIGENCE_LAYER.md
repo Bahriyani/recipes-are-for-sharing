@@ -1,32 +1,34 @@
-# Intelligence Layer — Recipes Are For Sharing
+# Intelligence Layer
 
-## v1: No AI (Core Runs Without It)
-The create → share flow is entirely user-driven. No AI in v1.
+## Messy Input → Structured Output
+Users type free-text into `recipe_details`. This may mix ingredients and method in any order or format.
 
-## Messy Inputs (what users actually type)
-- Recipe details: informal prose, mixed units, missing steps, colloquial language
-- Memory/story: emotional, fragmented, non-linear — this is the value, not a problem to fix
-
-## Auto-Structure Schema (for later AI parsing)
+### Auto-structure target (later)
 ```json
 {
-  "recipe_title": "Nonna's Sunday Ragù",
-  "ingredients": ["500g beef mince", "1 onion", "400g crushed tomatoes"],
-  "method_steps": ["Sauté onion", "Brown mince", "Simmer 3 hours"],
-  "story_summary": "Sunday family tradition, started after church.",
-  "story_enhanced": "Every Sunday morning...",
-  "story_enhanced_source": "openai/gpt-4o",
-  "story_enhanced_confidence": 0.91,
-  "story_enhanced_review_status": "unreviewed"
+  "raw_recipe_details": "2 cans tomatoes, garlic. Fry garlic, add tomatoes, simmer 45 min.",
+  "structured": {
+    "ingredients": ["2 cans San Marzano tomatoes", "1 head garlic"],
+    "method": ["Fry garlic in olive oil until golden", "Add crushed tomatoes", "Simmer 45 minutes"]
+  },
+  "source": "gpt-4o",
+  "confidence": 0.91,
+  "review_status": "unreviewed"
 }
 ```
 
-## Events to Track (for later ranking)
-- `memory_created` — timestamp, author name present, photo attached (y/n)
-- `share_link_copied` — recipe memory id
-- `memory_page_viewed` — recipe memory id, referrer
+## Events to Track (later)
+- `memory_created` — recipe memory submitted
+- `memory_viewed` — `/memory/[id]` page opened
+- `share_link_copied` — copy button clicked
+
+## Scoring (later)
+- **Completeness score** (rule-based): photo present +1, story > 100 words +1, recipe > 50 words +1. Max 3. Shown as a quality indicator.
+- **Engagement** (later): view count, share clicks
 
 ## v1 vs Later
-- **v1:** rule-based required-field validation only
-- **Next:** AI story embellishment (low-risk, auto-draft, user reviews before publish)
-- **Later:** ingredient parser, recipe card formatter, similarity scoring across memories
+| v1 | Later |
+|----|-------|
+| All fields user-entered, no AI | AI story polish / caption suggestion |
+| No scoring | Completeness score shown on create page |
+| No event tracking | View + share analytics |

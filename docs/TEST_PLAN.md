@@ -1,29 +1,26 @@
-# Test Plan — Recipes Are For Sharing
+# Test Plan
 
-## Success Scenario (manual, end-to-end)
-1. Open homepage at `/` — confirm hero, CTA button, and sample memories grid are visible.
-2. Click 'Preserve a Recipe' — confirm navigation to `/create`.
-3. Upload a photo (JPG < 5MB) — confirm preview appears in form.
-4. Enter recipe title: `Grandma's Apple Cake`
-5. Enter recipe details: `200g flour, 3 apples... Mix and bake 180°C 40 min.`
-6. Enter memory/story: `She made this every autumn when we visited.`
-7. Enter author name: `Sarah Chen`
-8. Click 'Generate' — confirm loading state appears.
-9. Confirm navigation to `/memory/[id]` with correct data: photo, title, recipe, story, author.
-10. Click 'Copy Share Link' — confirm 'Copied!' feedback.
-11. Open the copied URL in an incognito window — confirm page loads with full memory (no login required).
-12. Confirm new memory appears in homepage sample grid on next load.
+## Primary Success Scenario (manual)
+1. Open the homepage `/` — verify 5 recipe memory cards load with photos, titles, and author names.
+2. Click any card — verify the `/memory/[id]` page shows the correct photo, title, recipe details, story, and author.
+3. Click "Preserve a Recipe" on the homepage — verify `/create` loads with an empty form.
+4. Attempt to hit Generate with all fields blank — verify inline errors appear on each required field.
+5. Upload a photo > 10 MB — verify an error message appears before submission.
+6. Upload a valid JPG/PNG, fill all fields, click Generate — verify redirect to `/memory/[id]`.
+7. On the new memory page, verify all entered data displays correctly including the uploaded photo.
+8. Click the copy-link button — verify a success toast appears.
+9. Open the copied URL in a private/incognito window — verify the page loads correctly without any login prompt.
+10. Paste the URL into a messaging app — verify OG preview shows the recipe photo and title.
 
-## Empty / Edge Cases
-- Submit form with missing required field → field-level error message shown, no DB write.
-- Submit without photo → form accepts it; memory page shows placeholder/no image gracefully.
-- Navigate to `/memory/nonexistent-id` → friendly 'Memory not found' error page.
-- Homepage with zero rows in DB → empty state message shown (not a crash).
-- Upload a file > 10MB → error message 'Photo must be under 10MB'.
-- Very long recipe details (5000 chars) → page renders without layout break.
+## Empty States
+- Delete all rows from `recipe_memories` — homepage shows "Be the first to preserve a recipe" empty state with CTA.
+- Visit `/memory/[non-existent-id]` — verify a clear 404 / "Memory not found" message, not a blank page or crash.
 
-## Regression Checks (after each sprint)
-- Seeded demo rows still appear on homepage.
-- Create flow still persists to DB (not just local state).
-- Memory page URL still resolves after Sprint 3 style changes.
-- After Sprint 4 auth: incognito user can still view a memory page at its URL.
+## Error States
+- Disconnect network mid-upload — verify a user-visible error message appears; form does not silently fail.
+- Submit form with only whitespace in required fields — verify server-side validation rejects it.
+
+## Lock-Down Regression (Sprint 4)
+- Log in as User A, create a memory, copy the `id`.
+- Log in as User B, attempt `DELETE /memory/[id]` — verify 403 / RLS rejection.
+- Log out entirely, open `/memory/[id]` — verify page still loads (public share must survive).

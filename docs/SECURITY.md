@@ -1,25 +1,20 @@
-# Security — Recipes Are For Sharing
+# Security
 
 ## Secret Handling
-- Supabase service-role key: server-side only (Next.js API routes / Server Actions). Never in client bundle.
-- Supabase anon key: client-safe, used with RLS enforced.
-- No other secrets in v1.
+- `SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` live in Vercel environment variables only — never in client-side code or the repo.
+- Frontend uses only the Supabase anon key (public, safe).
+- Storage bucket for recipe photos is set to **public read**, **authenticated (or service-role) write only**.
 
 ## Permission Model
-**v1 (demo-open):**
-- All `recipe_memories` rows readable by anyone.
-- Write open to anyone (no auth required) — enables frictionless demo.
-
-**Lock-down sprint (before real users):**
-- INSERT: requires `auth.uid()` — stored as `user_id`.
-- UPDATE/DELETE: `auth.uid() = user_id` only.
-- SELECT: remains public (shareable pages must be readable without login).
+- **v1:** RLS open policies allow anonymous reads and writes (demo mode). No sensitive personal data is collected.
+- **Lock-down sprint:** `insert/update/delete` on `recipe_memories` requires `auth.uid() = user_id`. Public `select` remains open so shared URLs continue to work without login.
+- Agents and server functions run with the **anon key** (user-level permissions) unless a service-role action is explicitly required and logged.
 
 ## Approved Tools Rule
-- No `run_any` or `eval` patterns.
-- File uploads go to Supabase Storage only — no third-party uploader with server-side secrets.
-- Share link is a plain URL — no token or signed URL needed for public memory pages.
+Only named, scoped tools are used by any automated step: `supabase.storage.upload`, `supabase.db.insert`, `openai.chat.complete`, `resend.send_email`. No `eval`, no `run_any`, no dynamic SQL construction from user input.
 
 ## Audit Principle
-- Every create/update/delete of a `recipe_memory` emits an audit row (post lock-down sprint).
-- Agent actions (email send, AI enhance) log action + user_id + object_id + timestamp before executing.
+Every state-changing action (create memory, delete memory, AI suggestion accepted) is logged with actor, target, timestamp, and payload. Logs are append-only. No log entry is ever updated or deleted.
+
+## Before Real Users
+Complete the lock-down sprint (Sprint 4) before promoting the app to real users or collecting real family data.

@@ -1,29 +1,33 @@
-# Architecture — Recipes Are For Sharing
+# Architecture
 
 ## Stack
-- **Frontend:** Next.js (App Router) on Vercel
-- **Database + Storage:** Supabase (Postgres + Storage bucket for photos)
+- **Frontend:** Next.js 14 (App Router) — hosted on Vercel
+- **Database + Auth:** Supabase (Postgres + RLS)
+- **Storage:** Supabase Storage (recipe photos)
 - **Styling:** Tailwind CSS
 
-## What to Build Now vs Later
-**Now:** create form → DB write → unique page render → share link copy
-**Next:** user accounts, ownership, edit/delete, My Recipes library
-**Later:** family collections, AI story enhancement, print-to-PDF, email sharing
+## Now vs Later
+| Now | Later |
+|-----|-------|
+| Anonymous recipe memory creation | User accounts + "My Memories" dashboard |
+| Public shareable `/memory/[id]` page | Owner-scoped edit / delete |
+| Photo upload to Supabase Storage | PDF / print export |
+| Homepage with seeded demo cards | Email a memory, family collections |
+| OG meta tags for social sharing | AI story-polish suggestions |
 
-## Key User Action — Step-by-Step
-1. Visitor clicks 'Preserve a Recipe' on homepage
-2. Form captures: photo, title, details, story, author name
-3. Photo uploads to Supabase Storage; public URL returned
-4. Form submits all fields → inserted as one row in `recipe_memories`
-5. DB returns the new row's `id`
-6. Browser navigates to `/memory/[id]` — the shareable Recipe Memory page
-7. Page reads `recipe_memories` by `id` and renders photo, recipe, story, author
-8. User copies the URL and shares it
+## Key User Action — Step by Step
+1. Visitor hits `/create` and fills the form
+2. Photo is uploaded to Supabase Storage → returns a public `photo_url`
+3. Form fields + `photo_url` are `INSERT`ed into `recipe_memories`
+4. Server returns the new row's `id`
+5. Browser navigates to `/memory/[id]`
+6. Page fetches the row by `id` and renders photo, recipe, story, author
+7. Share link (`window.location.href`) is displayed and copyable
 
 ## Layer Plan
-1. **Data first:** `recipe_memories` table, Storage bucket, open RLS policies
-2. **App logic:** create form, photo upload, memory page, share button
-3. **Smart features (later):** AI story embellishment, og:image generation, PDF export
+1. **Data first** — table + RLS + seed rows
+2. **App logic** — form → insert → page render (works with AI off)
+3. **Smart features** — OG previews, AI story suggestions (later)
 
-## Core Without AI
-The entire create-and-share flow is pure form → DB → page render. No AI dependency in v1.
+## Why the Core Runs Without AI
+Every field is user-supplied. No AI field is required to create or display a recipe memory. AI features are additive and clearly marked for later sprints.
