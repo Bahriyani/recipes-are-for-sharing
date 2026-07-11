@@ -1,0 +1,1 @@
+"use client"; import {useState} from "react"; export default function ShareButton(){const [done,setDone]=useState(false);return <><button className="button secondary" onClick={async()=>{await navigator.clipboard.writeText(location.href);setDone(true);setTimeout(()=>setDone(false),2500)}}>Copy share link</button>{done&&<p className="notice">Link copied — ready to share.</p>}</>}
