@@ -24,3 +24,7 @@
 - Log in as User A, create a memory, copy the `id`.
 - Log in as User B, attempt `DELETE /memory/[id]` — verify 403 / RLS rejection.
 - Log out entirely, open `/memory/[id]` — verify page still loads (public share must survive).
+
+## Milestone 2.0 status
+
+Component/unit tests verify bootstrap idempotency, duplicate callback protection, child blocking, MIME validation, owner paths, omitted `user_id`, and navigation fallback. SQL inspection verifies migration clauses. Isolated Supabase integration still must verify User A/B RLS, NULL-owned rows, Storage isolation, bucket limits, ON DELETE SET NULL, and real Turnstile fresh-browser flow.

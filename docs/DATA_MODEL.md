@@ -26,3 +26,7 @@ When an AI caption / story-polish is added:
 
 ## Relationships
 Standalone table in v1. No joins required. `user_id` FK added at lock-down sprint.
+
+## Anonymous ownership
+
+New `user_id` values default to `auth.uid()`; the client omits that field. Public SELECT remains open while mutations require the owner. The nine demo rows remain NULL-owned, public, and immutable. The Auth FK uses `ON DELETE SET NULL`, preserving public memories after owner deletion. Anonymous ownership is browser/session-bound until a future upgrade preserves the same UUID.

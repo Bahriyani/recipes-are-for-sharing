@@ -18,3 +18,7 @@ Every state-changing action (create memory, delete memory, AI suggestion accepte
 
 ## Before Real Users
 Complete the lock-down sprint (Sprint 4) before promoting the app to real users or collecting real family data.
+
+## Milestone 2.0
+
+`recipe-photos` is public-read; owner mutations require the caller's first-level `{auth.uid()}` folder and the recipe-photos bucket. Bucket limits are 6 MB and JPEG/PNG/WebP. Failed inserts attempt object cleanup. Turnstile uses only `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; its secret lives in Supabase Bot Protection. Distributed rate limiting is deferred to 2.0b. Normal Windows npm access worked; Codex's execution environment had TLS/credential limitations, with no SSL, registry, proxy, or certificate weakening.

@@ -31,3 +31,7 @@
 
 ## Why the Core Runs Without AI
 Every field is user-supplied. No AI field is required to create or display a recipe memory. AI features are additive and clearly marked for later sprints.
+
+## Anonymous ownership
+
+`/create` establishes or reuses a cookie-backed Supabase Anonymous Auth session before rendering its form. Cloudflare Turnstile protects new sign-ins; no custom auth API route is used. `@supabase/ssr` browser/server clients and middleware maintain the session. Public memory pages remain unauthenticated. New photos use `{auth.uid()}/{random-uuid}.{validated-extension}`.
