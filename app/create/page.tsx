@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAnonymousSession } from "@/components/auth/anonymous-session-bootstrap";
 import { createClient } from "@/lib/supabase/client";
@@ -27,9 +27,12 @@ export default function CreatePage() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
+  const [createdMemoryId, setCreatedMemoryId] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) return;
     const nextErrors: Record<string, string> = {};
     fields.forEach((field) => {
       if (!values[field].trim()) nextErrors[field] = "This field is required.";
@@ -50,6 +53,7 @@ export default function CreatePage() {
 
     if (!userId) return;
 
+    isSubmittingRef.current = true;
     setErrors({});
     setStatus("Creating your memory…");
     const supabase = createClient();
@@ -63,6 +67,7 @@ export default function CreatePage() {
         .upload(storagePath, photo, { contentType: photo.type });
 
       if (uploadError) {
+        isSubmittingRef.current = false;
         setStatus("");
         setErrors({ photo: "We could not upload your photo. Please try again." });
         return;
@@ -86,12 +91,15 @@ export default function CreatePage() {
           });
         }
       }
+      isSubmittingRef.current = false;
       setStatus("");
       setErrors({ form: "We could not save your recipe memory. Please try again." });
       return;
     }
 
-    router.push(`/memory/${data.id}`);
+    setCreatedMemoryId(data.id);
+    setStatus("Memory created. Opening it…");
+    router.replace(`/memory/${data.id}`);
   }
 
   return <main className="shell narrow">
@@ -113,6 +121,7 @@ export default function CreatePage() {
       </label>
       {errors.session && <p className="notice error">{errors.session}</p>}
       {errors.form && <p className="notice error">{errors.form}</p>}
+      {createdMemoryId && <p className="notice">Your memory is ready. <a href={`/memory/${createdMemoryId}`}>Open it now</a>.</p>}
       <button className="button" disabled={Boolean(status)}>{status || "Generate recipe memory"}</button>
     </form>
   </main>;
