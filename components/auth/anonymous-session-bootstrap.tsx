@@ -36,6 +36,9 @@ function loadTurnstile() {
 export function AnonymousSessionBootstrap({ children }: { children: React.ReactNode }) {
   const target = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
+  const isRenderingCaptcha = useRef(false);
+  const isSigningIn = useRef(false);
+  const initializationVersion = useRef(0);
   const [status, setStatus] = useState<Status>("checking");
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -46,20 +49,30 @@ export function AnonymousSessionBootstrap({ children }: { children: React.ReactN
   }, []);
 
   const establishSession = useCallback(async (captchaToken: string) => {
+    if (isSigningIn.current) return;
+    isSigningIn.current = true;
     setStatus("creating");
     setError(null);
-    const supabase = createClient();
-    const { data, error: signInError } = await supabase.auth.signInAnonymously({
-      options: { captchaToken },
-    });
-    if (signInError || !data.user) {
+    try {
+      const supabase = createClient();
+      const { data, error: signInError } = await supabase.auth.signInAnonymously({
+        options: { captchaToken },
+      });
+      if (signInError || !data.user) {
+        setStatus("error");
+        setError(signInError?.message ?? "CAPTCHA was rejected. Please try again.");
+        resetCaptcha();
+        return;
+      }
+      setUserId(data.user.id);
+      setStatus("ready");
+    } catch {
       setStatus("error");
-      setError(signInError?.message ?? "CAPTCHA was rejected. Please try again.");
+      setError("We could not create your session. Please try again.");
       resetCaptcha();
-      return;
+    } finally {
+      isSigningIn.current = false;
     }
-    setUserId(data.user.id);
-    setStatus("ready");
   }, [resetCaptcha]);
 
   const renderCaptcha = useCallback(async () => {
@@ -68,9 +81,17 @@ export function AnonymousSessionBootstrap({ children }: { children: React.ReactN
       setError("CAPTCHA is not configured. Please try again later.");
       return;
     }
+    if (widgetId.current) {
+      resetCaptcha();
+      setStatus("captcha");
+      return;
+    }
+    if (isRenderingCaptcha.current) return;
+    isRenderingCaptcha.current = true;
+    const version = initializationVersion.current;
     try {
       await loadTurnstile();
-      if (!target.current || widgetId.current || !window.turnstile) return;
+      if (version !== initializationVersion.current || !target.current || widgetId.current || !window.turnstile) return;
       widgetId.current = window.turnstile.render(target.current, {
         sitekey: siteKey,
         callback: establishSession,
@@ -88,6 +109,8 @@ export function AnonymousSessionBootstrap({ children }: { children: React.ReactN
     } catch (cause) {
       setStatus("error");
       setError(cause instanceof Error ? cause.message : "Unable to load CAPTCHA.");
+    } finally {
+      if (version === initializationVersion.current) isRenderingCaptcha.current = false;
     }
   }, [establishSession, resetCaptcha, siteKey]);
 
@@ -111,13 +134,15 @@ export function AnonymousSessionBootstrap({ children }: { children: React.ReactN
 
   useEffect(() => { void checkSession(); }, [checkSession]);
   useEffect(() => () => {
+    initializationVersion.current += 1;
+    isRenderingCaptcha.current = false;
     if (widgetId.current && window.turnstile) window.turnstile.remove(widgetId.current);
+    widgetId.current = null;
   }, []);
 
   const retry = () => { resetCaptcha(); void checkSession(); };
   return <AnonymousSessionContext.Provider value={{ status, error, userId, retry }}>
-    {children}
-    {status !== "ready" && <aside className="auth-status" aria-live="polite">
+    {status === "ready" ? children : <aside className="auth-status" aria-live="polite">
       {status === "checking" && <p>Preparing your private recipe space…</p>}
       {status === "creating" && <p>Creating your secure session…</p>}
       {status === "captcha" && <p>Complete the CAPTCHA to continue.</p>}
