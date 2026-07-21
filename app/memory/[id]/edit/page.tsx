@@ -18,6 +18,6 @@ export default async function EditMemoryPage({ params }: { params: Promise<{ id:
       recipe_details: memory.recipe_details,
       memory_story: memory.memory_story,
       author_name: memory.author_name,
-    }} />
+    }} photoUrl={memory.photo_url} />
   </main>;
 }

@@ -23,7 +23,7 @@ function SubmitButton() {
   return <button className="button" disabled={pending}>{pending ? "Saving changes…" : "Save changes"}</button>;
 }
 
-export default function EditForm({ id, values }: { id: string; values: RecipeMemoryTextValues }) {
+export default function EditForm({ id, values, photoUrl = null }: { id: string; values: RecipeMemoryTextValues; photoUrl?: string | null }) {
   const [state, formAction] = useActionState(updateRecipeMemory.bind(null, id), initialState);
   const isSubmittingRef = useRef(false);
 
@@ -40,6 +40,7 @@ export default function EditForm({ id, values }: { id: string; values: RecipeMem
   }
 
   return <form action={formAction} onSubmit={preventDuplicateSubmit} noValidate>
+    {photoUrl && <img className="memory-photo" src={photoUrl} alt={`Current photo of ${values.recipe_title}`} />}
     {recipeMemoryFields.map((field) => <label key={field}>
       {labels[field]}
       {field === "recipe_details" || field === "memory_story"
@@ -47,6 +48,11 @@ export default function EditForm({ id, values }: { id: string; values: RecipeMem
         : <input name={field} defaultValue={values[field]} />}
       {state.fieldErrors?.[field] && <span className="field-error">{state.fieldErrors[field]}</span>}
     </label>)}
+    <label>Replace photo
+      <input name="photo" type="file" accept="image/jpeg,image/png,image/webp" />
+      <small>JPEG, PNG, or WebP up to 6 MB.</small>
+      {state.photoError && <span className="field-error">{state.photoError}</span>}
+    </label>
     {state.formError && <p className="notice error" role="alert">{state.formError}</p>}
     <SubmitButton />
   </form>;

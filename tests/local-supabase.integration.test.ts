@@ -278,6 +278,106 @@ describe("local Supabase ownership and storage policies", () => {
     expect(unchangedOtherOwner).toBeNull();
   });
 
+  it("verifies owner-authorized photo replacement lifecycle", async () => {
+    const { data: memory, error: insertError } = await clientA
+      .from("recipe_memories")
+      .insert({
+        recipe_title: `${titlePrefix} photo replacement`,
+        recipe_details: "Replacement details",
+        memory_story: "Replacement story",
+        author_name: "Integration Runner",
+      })
+      .select("id,user_id,photo_url")
+      .single();
+    expect(insertError).toBeNull();
+    rowIds.push(memory!.id);
+
+    const oldPath = `${userA.id}/${randomUUID()}.webp`;
+    const newPath = `${userA.id}/${randomUUID()}.png`;
+    objectPaths.push(oldPath, newPath);
+    const payload = Buffer.from("image-payload");
+    const oldUpload = await clientA.storage.from("recipe-photos").upload(oldPath, payload, { contentType: "image/webp" });
+    expect(oldUpload.error).toBeNull();
+    const oldUrl = clientA.storage.from("recipe-photos").getPublicUrl(oldPath).data.publicUrl;
+    const setOldPhoto = await clientA.from("recipe_memories").update({ photo_url: oldUrl }).eq("id", memory!.id).eq("user_id", userA.id);
+    expect(setOldPhoto.error).toBeNull();
+
+    const newUpload = await clientA.storage.from("recipe-photos").upload(newPath, payload, { contentType: "image/png" });
+    expect(newUpload.error).toBeNull();
+    const newUrl = clientA.storage.from("recipe-photos").getPublicUrl(newPath).data.publicUrl;
+    const { data: replaced, error: replaceError } = await clientA
+      .from("recipe_memories")
+      .update({ photo_url: newUrl })
+      .eq("id", memory!.id)
+      .eq("user_id", userA.id)
+      .select("id,user_id,photo_url")
+      .single();
+    expect(replaceError).toBeNull();
+    expect(replaced?.photo_url).toBe(newUrl);
+    expect(replaced?.user_id).toBe(userA.id);
+
+    const publicResponse = await fetch(newUrl);
+    expect(publicResponse.ok).toBe(true);
+    const oldRemoval = await clientA.storage.from("recipe-photos").remove([oldPath]);
+    expect(oldRemoval.error).toBeNull();
+
+    const { data: nonOwner, error: nonOwnerError } = await clientB
+      .from("recipe_memories")
+      .update({ photo_url: oldUrl })
+      .eq("id", memory!.id)
+      .select("id")
+      .maybeSingle();
+    expect(nonOwnerError).toBeNull();
+    expect(nonOwner).toBeNull();
+
+    const { data: anonymous, error: anonymousError } = await anon
+      .from("recipe_memories")
+      .update({ photo_url: oldUrl })
+      .eq("id", memory!.id)
+      .select("id")
+      .maybeSingle();
+    expect(anonymousError).toBeNull();
+    expect(anonymous).toBeNull();
+  });
+
+  it("cleans a new upload after a failed update and preserves the old image", async () => {
+    const { data: memory, error: insertError } = await clientA
+      .from("recipe_memories")
+      .insert({
+        recipe_title: `${titlePrefix} failed replacement`,
+        recipe_details: "Original details",
+        memory_story: "Original story",
+        author_name: "Integration Runner",
+      })
+      .select("id")
+      .single();
+    expect(insertError).toBeNull();
+    rowIds.push(memory!.id);
+
+    const oldPath = `${userA.id}/${randomUUID()}.webp`;
+    const newPath = `${userA.id}/${randomUUID()}.webp`;
+    objectPaths.push(oldPath, newPath);
+    const payload = Buffer.from("image-payload");
+    expect((await clientA.storage.from("recipe-photos").upload(oldPath, payload, { contentType: "image/webp" })).error).toBeNull();
+    const oldUrl = clientA.storage.from("recipe-photos").getPublicUrl(oldPath).data.publicUrl;
+    expect((await clientA.from("recipe_memories").update({ photo_url: oldUrl }).eq("id", memory!.id).eq("user_id", userA.id))).toMatchObject({ error: null });
+
+    expect((await clientA.storage.from("recipe-photos").upload(newPath, payload, { contentType: "image/webp" })).error).toBeNull();
+    const newUrl = clientA.storage.from("recipe-photos").getPublicUrl(newPath).data.publicUrl;
+    const failedUpdate = await clientA.from("recipe_memories").update({ recipe_title: null, photo_url: newUrl }).eq("id", memory!.id).eq("user_id", userA.id);
+    expect(failedUpdate.error).not.toBeNull();
+    expect((await clientA.storage.from("recipe-photos").remove([newPath])).error).toBeNull();
+
+    const { data: unchanged, error: unchangedError } = await anon
+      .from("recipe_memories")
+      .select("photo_url")
+      .eq("id", memory!.id)
+      .single();
+    expect(unchangedError).toBeNull();
+    expect(unchanged?.photo_url).toBe(oldUrl);
+    expect((await fetch(oldUrl)).ok).toBe(true);
+  });
+
   it("sets ownership to NULL when a disposable Auth user is deleted", async () => {
     const deletionUser = await createTestUser(admin, runId, "deletion-user");
     const { url, anonKey } = localConfigForAuth();
