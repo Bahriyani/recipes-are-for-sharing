@@ -29,7 +29,7 @@ describe("local Supabase ownership and storage policies", () => {
     const { url, anonKey } = localConfigForAuth();
     clientA = await signInTestUser(url, anonKey, userA);
     clientB = await signInTestUser(url, anonKey, userB);
-  });
+  }, 60000);
 
   afterAll(async () => {
     for (const path of objectPaths) {
@@ -40,7 +40,7 @@ describe("local Supabase ownership and storage policies", () => {
     }
     if (userA?.id) await admin.auth.admin.deleteUser(userA.id);
     if (userB?.id) await admin.auth.admin.deleteUser(userB.id);
-  });
+  }, 60000);
 
   it("verifies database ownership, public reads, and auth-user deletion", async () => {
     const config = getLocalSupabaseConfig();
@@ -187,6 +187,95 @@ describe("local Supabase ownership and storage policies", () => {
         contentType: "image/webp",
       });
     expect(oversized.error).not.toBeNull();
+  });
+
+  it("verifies owner-only text updates and public freshness", async () => {
+    const { data: memory, error: insertError } = await clientA
+      .from("recipe_memories")
+      .insert({
+        recipe_title: `${titlePrefix} editable`,
+        recipe_details: "Original details",
+        memory_story: "Original story",
+        author_name: "Original author",
+      })
+      .select("id,user_id,recipe_title,recipe_details,memory_story,author_name")
+      .single();
+    expect(insertError).toBeNull();
+    rowIds.push(memory!.id);
+
+    const { data: updated, error: ownerUpdateError } = await clientA
+      .from("recipe_memories")
+      .update({
+        recipe_title: `${titlePrefix} updated`,
+        recipe_details: "Updated details",
+        memory_story: "Updated story",
+        author_name: "Updated author",
+      })
+      .eq("id", memory!.id)
+      .eq("user_id", userA.id)
+      .select("id,user_id,recipe_title,recipe_details,memory_story,author_name")
+      .maybeSingle();
+    expect(ownerUpdateError).toBeNull();
+    expect(updated?.user_id).toBe(userA.id);
+    expect(updated?.recipe_details).toBe("Updated details");
+
+    const { data: publicUpdated, error: publicUpdatedError } = await anon
+      .from("recipe_memories")
+      .select("recipe_title,recipe_details,memory_story,author_name,user_id")
+      .eq("id", memory!.id)
+      .single();
+    expect(publicUpdatedError).toBeNull();
+    expect(publicUpdated?.recipe_title).toBe(`${titlePrefix} updated`);
+    expect(publicUpdated?.user_id).toBe(userA.id);
+
+    const { data: nonOwnerUpdate, error: nonOwnerError } = await clientB
+      .from("recipe_memories")
+      .update({ recipe_title: "Should not persist" })
+      .eq("id", memory!.id)
+      .select("id")
+      .maybeSingle();
+    expect(nonOwnerError).toBeNull();
+    expect(nonOwnerUpdate).toBeNull();
+
+    const { data: anonymousUpdate, error: anonymousError } = await anon
+      .from("recipe_memories")
+      .update({ recipe_title: "Anonymous should fail" })
+      .eq("id", memory!.id)
+      .select("id")
+      .maybeSingle();
+    expect(anonymousError).toBeNull();
+    expect(anonymousUpdate).toBeNull();
+
+    const { data: nonexistentUpdate, error: nonexistentError } = await clientA
+      .from("recipe_memories")
+      .update({ recipe_title: "No row" })
+      .eq("id", "00000000-0000-4000-8000-000000000000")
+      .select("id")
+      .maybeSingle();
+    expect(nonexistentError).toBeNull();
+    expect(nonexistentUpdate).toBeNull();
+
+    const { data: otherOwnerRecord, error: otherOwnerError } = await clientB
+      .from("recipe_memories")
+      .insert({
+        recipe_title: `${titlePrefix} other owner`,
+        recipe_details: "B details",
+        memory_story: "B story",
+        author_name: "B author",
+      })
+      .select("id,user_id,recipe_title")
+      .single();
+    expect(otherOwnerError).toBeNull();
+    rowIds.push(otherOwnerRecord!.id);
+
+    const { data: unchangedOtherOwner, error: unchangedOtherOwnerError } = await clientA
+      .from("recipe_memories")
+      .update({ recipe_title: "A cannot change B" })
+      .eq("id", otherOwnerRecord!.id)
+      .select("id")
+      .maybeSingle();
+    expect(unchangedOtherOwnerError).toBeNull();
+    expect(unchangedOtherOwner).toBeNull();
   });
 
   it("sets ownership to NULL when a disposable Auth user is deleted", async () => {

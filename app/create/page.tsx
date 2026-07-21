@@ -4,8 +4,8 @@ import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAnonymousSession } from "@/components/auth/anonymous-session-bootstrap";
 import { createClient } from "@/lib/supabase/client";
+import { recipeMemoryFields, validateRecipeMemoryText } from "@/lib/recipe-memory-validation";
 
-const fields = ["recipe_title", "recipe_details", "memory_story", "author_name"] as const;
 const imageExtensions = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -13,7 +13,7 @@ const imageExtensions = {
 } as const;
 const maxPhotoBytes = 6 * 1024 * 1024;
 
-type FormValues = Record<(typeof fields)[number], string>;
+type FormValues = Record<(typeof recipeMemoryFields)[number], string>;
 
 export default function CreatePage() {
   const router = useRouter();
@@ -33,10 +33,7 @@ export default function CreatePage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmittingRef.current) return;
-    const nextErrors: Record<string, string> = {};
-    fields.forEach((field) => {
-      if (!values[field].trim()) nextErrors[field] = "This field is required.";
-    });
+    const nextErrors: Record<string, string> = { ...validateRecipeMemoryText(values) };
 
     if (!userId) {
       nextErrors.session = "Your private session is unavailable. Please refresh and try again.";
@@ -107,7 +104,7 @@ export default function CreatePage() {
     <h1>Preserve a recipe memory</h1>
     <p className="lede">Everything you need for a shareable family recipe.</p>
     <form onSubmit={submit} noValidate>
-      {fields.map((field) => <label key={field}>
+      {recipeMemoryFields.map((field) => <label key={field}>
         {field === "recipe_title" ? "Recipe title" : field === "recipe_details" ? "Recipe details (ingredients and method)" : field === "memory_story" ? "The memory behind it" : "Your name"}
         {field === "recipe_details" || field === "memory_story"
           ? <textarea value={values[field]} onChange={(event) => setValues({ ...values, [field]: event.target.value })} />

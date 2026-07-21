@@ -1,4 +1,20 @@
-import { Metadata } from "next"; import Link from "next/link"; import { notFound } from "next/navigation"; import { createClient } from "@/lib/supabase/server"; import ShareButton from "./share-button";
-type Props={params:Promise<{id:string}>}; async function getMemory(id:string){const s=await createClient();const {data}=await s.from("recipe_memories").select("*").eq("id",id).maybeSingle();return data}
-export async function generateMetadata({params}:Props):Promise<Metadata>{const m=await getMemory((await params).id);return m?{title:`${m.recipe_title} | Recipes Are For Sharing`,description:m.memory_story.slice(0,160),openGraph:{title:m.recipe_title,description:m.memory_story.slice(0,160),images:m.photo_url?[m.photo_url]:[]}}:{title:"Memory not found"}}
-export default async function MemoryPage({params}:Props){const m=await getMemory((await params).id);if(!m)notFound();return <main className="shell narrow"><header><Link className="brand" href="/">Recipes Are For Sharing</Link></header>{m.photo_url&&<img className="memory-photo" src={m.photo_url} alt={`Photo of ${m.recipe_title}`}/>}<p className="eyebrow">Shared by {m.author_name}</p><h1>{m.recipe_title}</h1><ShareButton/><section><h2>The recipe</h2><p className="preserve">{m.recipe_details}</p></section><section><h2>The memory</h2><p className="preserve story">{m.memory_story}</p></section></main>}
+import { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import ShareButton from "./share-button";
+import { getRecipeMemory } from "@/lib/recipe-memories";
+
+type Props = { params: Promise<{ id: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { memory } = await getRecipeMemory((await params).id);
+  return memory
+    ? { title: `${memory.recipe_title} | Recipes Are For Sharing`, description: memory.memory_story.slice(0, 160), openGraph: { title: memory.recipe_title, description: memory.memory_story.slice(0, 160), images: memory.photo_url ? [memory.photo_url] : [] } }
+    : { title: "Memory not found" };
+}
+
+export default async function MemoryPage({ params }: Props) {
+  const { memory, isOwner } = await getRecipeMemory((await params).id);
+  if (!memory) notFound();
+  return <main className="shell narrow"><header><Link className="brand" href="/">Recipes Are For Sharing</Link></header>{memory.photo_url && <img className="memory-photo" src={memory.photo_url} alt={`Photo of ${memory.recipe_title}`} />}<p className="eyebrow">Shared by {memory.author_name}</p><h1>{memory.recipe_title}</h1><div className="actions">{isOwner && <Link className="button secondary" href={`/memory/${memory.id}/edit`}>Edit memory</Link>}<ShareButton /></div><section><h2>The recipe</h2><p className="preserve">{memory.recipe_details}</p></section><section><h2>The memory</h2><p className="preserve story">{memory.memory_story}</p></section></main>;
+}
