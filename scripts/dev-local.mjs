@@ -45,6 +45,9 @@ const child = spawn(devCommand, devArgs, {
     ...process.env,
     NEXT_PUBLIC_SUPABASE_URL: localUrl,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: localAnonKey,
+    // Local Supabase intentionally has CAPTCHA disabled. Do not inherit a
+    // production Turnstile key from .env.local into the local development app.
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: "",
   },
   stdio: "inherit",
 });

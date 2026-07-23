@@ -1,20 +1,16 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAnonymousSession } from "@/components/auth/anonymous-session-bootstrap";
 import { createClient } from "@/lib/supabase/client";
 import { recipeMemoryFields, validateRecipeMemoryText } from "@/lib/recipe-memory-validation";
-import { createRecipeImageIdentity } from "@/lib/recipe-photo";
+import { createRecipeImageIdentity, validateRecipePhoto } from "@/lib/recipe-photo";
 
-const imageExtensions = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-} as const;
-const maxPhotoBytes = 6 * 1024 * 1024;
+const maxRecipeImages = 5;
 
 type FormValues = Record<(typeof recipeMemoryFields)[number], string>;
+type UploadedAsset = { id: string; path: string; publicUrl: string };
 
 export default function CreatePage() {
   const router = useRouter();
@@ -25,30 +21,78 @@ export default function CreatePage() {
     memory_story: "",
     author_name: "",
   });
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
   const [createdMemoryId, setCreatedMemoryId] = useState<string | null>(null);
   const isSubmittingRef = useRef(false);
 
+  function handlePhotoSelection(event: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
+
+    if (selected.length > maxRecipeImages) {
+      setErrors((current) => ({ ...current, photo: "Choose no more than 5 images." }));
+      return;
+    }
+
+    for (const file of selected) {
+      const validation = validateRecipePhoto(file);
+      if (validation.error) {
+        setErrors((current) => ({ ...current, photo: validation.error ?? "Invalid image." }));
+        return;
+      }
+    }
+
+    setPhotos(selected);
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.photo;
+      return next;
+    });
+  }
+
+  async function cleanUpFailedCreate(
+    supabase: ReturnType<typeof createClient>,
+    recipeMemoryId: string,
+    ownerId: string,
+    uploadedAssets: UploadedAsset[],
+  ) {
+    if (uploadedAssets.length) {
+      const { error } = await supabase.storage.from("recipe-photos").remove(uploadedAssets.map((asset) => asset.path));
+      if (error) console.warn("[recipe-memory/create] storage cleanup failed", { memoryId: recipeMemoryId, stage: "storage", reason: "storage_error" });
+    }
+
+    const { error: assetCleanupError } = await supabase
+      .from("recipe_assets")
+      .delete()
+      .eq("recipe_memory_id", recipeMemoryId);
+    if (assetCleanupError) console.warn("[recipe-memory/create] asset cleanup failed", { memoryId: recipeMemoryId, stage: "assets", reason: "database_error" });
+
+    const { error: recipeCleanupError } = await supabase
+      .from("recipe_memories")
+      .delete()
+      .eq("id", recipeMemoryId)
+      .eq("user_id", ownerId);
+    if (recipeCleanupError) console.warn("[recipe-memory/create] recipe cleanup failed", { memoryId: recipeMemoryId, stage: "recipe", reason: "database_error" });
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmittingRef.current) return;
+
     const nextErrors: Record<string, string> = { ...validateRecipeMemoryText(values) };
-
-    if (!userId) {
-      nextErrors.session = "Your private session is unavailable. Please refresh and try again.";
+    if (!userId) nextErrors.session = "Your private session is unavailable. Please refresh and try again.";
+    if (!photos.length) nextErrors.photo = "Select at least one JPEG, PNG, or WebP image.";
+    if (photos.length > maxRecipeImages) nextErrors.photo = "Choose no more than 5 images.";
+    for (const file of photos) {
+      const validation = validateRecipePhoto(file);
+      if (validation.error) nextErrors.photo = validation.error;
     }
-
-    const extension = photo ? imageExtensions[photo.type as keyof typeof imageExtensions] : undefined;
-    if (photo && !extension) nextErrors.photo = "Use a JPEG, PNG, or WebP image.";
-    if (photo && photo.size > maxPhotoBytes) nextErrors.photo = "Use an image smaller than 6 MB.";
 
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
-
     if (!userId) return;
 
     isSubmittingRef.current = true;
@@ -56,76 +100,66 @@ export default function CreatePage() {
     setStatus("Creating your memory…");
     const supabase = createClient();
     const recipeMemoryId = crypto.randomUUID();
-    let storagePath: string | undefined;
-    let assetId: string | undefined;
-    let photoUrl: string | undefined;
+    const uploadedAssets: UploadedAsset[] = [];
 
-    if (photo && extension) {
-      const identity = createRecipeImageIdentity(userId, recipeMemoryId, photo.type);
-      if (!identity.path || !identity.assetId) {
-        isSubmittingRef.current = false;
-        setStatus("");
-        setErrors({ photo: "Use a JPEG, PNG, or WebP image." });
-        return;
-      }
-      storagePath = identity.path;
-      assetId = identity.assetId;
-      const { error: uploadError } = await supabase.storage
-        .from("recipe-photos")
-        .upload(storagePath, photo, { contentType: photo.type });
+    try {
+      const { data, error: recipeError } = await supabase
+        .from("recipe_memories")
+        .insert({ id: recipeMemoryId, ...values, photo_url: null })
+        .select("id")
+        .single();
+      if (recipeError || !data) throw new Error("recipe_insert");
 
-      if (uploadError) {
-        isSubmittingRef.current = false;
-        setStatus("");
-        setErrors({ photo: "We could not upload your photo. Please try again." });
-        return;
+      for (const file of photos) {
+        const identity = createRecipeImageIdentity(userId, recipeMemoryId, file.type);
+        if (!identity.path || !identity.assetId) throw new Error("photo_validation");
+        const { error: uploadError } = await supabase.storage
+          .from("recipe-photos")
+          .upload(identity.path, file, { contentType: file.type });
+        if (uploadError) throw new Error("storage_upload");
+        const publicUrl = supabase.storage.from("recipe-photos").getPublicUrl(identity.path).data.publicUrl;
+        uploadedAssets.push({ id: identity.assetId, path: identity.path, publicUrl });
       }
 
-      photoUrl = supabase.storage.from("recipe-photos").getPublicUrl(storagePath).data.publicUrl;
-    }
+      const { error: assetsError } = await supabase.from("recipe_assets").insert(
+        uploadedAssets.map((asset, index) => ({
+          id: asset.id,
+          recipe_memory_id: recipeMemoryId,
+          asset_type: "image",
+          storage_bucket: "recipe-photos",
+          storage_path: asset.path,
+          mime_type: photos[index].type,
+          byte_size: photos[index].size,
+          display_order: index,
+          is_cover: index === 0,
+          processing_status: "ready",
+        })),
+      );
+      if (assetsError) throw new Error("asset_insert");
 
-    const { data, error: insertError } = await supabase
-      .from("recipe_memories")
-      .insert({ id: recipeMemoryId, ...values, photo_url: photoUrl })
-      .select("id")
-      .single();
+      const { error: mirrorError } = await supabase
+        .from("recipe_memories")
+        .update({ photo_url: uploadedAssets[0].publicUrl })
+        .eq("id", recipeMemoryId)
+        .eq("user_id", userId);
+      if (mirrorError) throw new Error("recipe_update");
 
-    if (insertError || !data) {
-      if (storagePath) {
-        const { error: cleanupError } = await supabase.storage.from("recipe-photos").remove([storagePath]);
-        if (cleanupError) {
-          console.error("[recipe-memory/create] upload cleanup failed", {
-            message: cleanupError.message,
-          });
-        }
-      }
+      setCreatedMemoryId(recipeMemoryId);
+      setStatus("Memory created. Opening it…");
+      router.replace(`/memory/${recipeMemoryId}`);
+    } catch (error) {
+      await cleanUpFailedCreate(supabase, recipeMemoryId, userId, uploadedAssets);
       isSubmittingRef.current = false;
       setStatus("");
-      setErrors({ form: "We could not save your recipe memory. Please try again." });
-      return;
-    }
-
-    if (storagePath && photoUrl && extension && assetId) {
-      const { error: assetError } = await supabase.from("recipe_assets").insert({
-        id: assetId,
-        recipe_memory_id: data.id,
-        asset_type: "image",
-        storage_bucket: "recipe-photos",
-        storage_path: storagePath,
-        mime_type: photo?.type ?? "image/" + extension,
-        byte_size: photo?.size ?? null,
-        display_order: 0,
-        is_cover: true,
-        processing_status: "ready",
+      const reason = error instanceof Error ? error.message : "unknown";
+      setErrors({
+        form: reason === "storage_upload"
+          ? "We could not upload your photos. Please try again."
+          : reason === "photo_validation"
+            ? "Use JPEG, PNG, or WebP images."
+            : "We could not save your recipe memory. Please try again.",
       });
-      if (assetError) {
-        console.warn("[recipe-memory/create] asset compatibility write failed", { memoryId: data.id });
-      }
     }
-
-    setCreatedMemoryId(data.id);
-    setStatus("Memory created. Opening it…");
-    router.replace(`/memory/${data.id}`);
   }
 
   return <main className="shell narrow">
@@ -141,8 +175,9 @@ export default function CreatePage() {
         {errors[field] && <span className="field-error">{errors[field]}</span>}
         {field === "memory_story" && <small>{values.memory_story.trim() ? values.memory_story.trim().split(/\s+/).length : 0} words · 100+ is a lovely keepsake</small>}
       </label>)}
-      <label>Photo
-        <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0] ?? null)} />
+      <label>Photos (1–5)
+        <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handlePhotoSelection} />
+        {photos.length > 0 && <ul aria-label="Selected photos">{photos.map((file) => <li key={`${file.name}-${file.lastModified}`}>{file.name}</li>)}</ul>}
         {errors.photo && <span className="field-error">{errors.photo}</span>}
       </label>
       {errors.session && <p className="notice error">{errors.session}</p>}
