@@ -43,21 +43,32 @@ export function AnonymousSessionBootstrap({ children }: { children: React.ReactN
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const isLocalDevelopment = process.env.NODE_ENV === "development";
+  const isLocalSupabase = (() => {
+    try {
+      const url = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
+      return (url.hostname === "127.0.0.1" || url.hostname === "localhost") && url.port === "54321";
+    } catch {
+      return false;
+    }
+  })();
+  const canSkipCaptcha = isLocalDevelopment && isLocalSupabase && !siteKey;
 
   const resetCaptcha = useCallback(() => {
     if (widgetId.current && window.turnstile) window.turnstile.reset(widgetId.current);
   }, []);
 
-  const establishSession = useCallback(async (captchaToken: string) => {
+  const establishSession = useCallback(async (captchaToken?: string) => {
     if (isSigningIn.current) return;
     isSigningIn.current = true;
     setStatus("creating");
     setError(null);
     try {
       const supabase = createClient();
-      const { data, error: signInError } = await supabase.auth.signInAnonymously({
-        options: { captchaToken },
-      });
+      const result = captchaToken
+        ? await supabase.auth.signInAnonymously({ options: { captchaToken } })
+        : await supabase.auth.signInAnonymously();
+      const { data, error: signInError } = result;
       if (signInError || !data.user) {
         setStatus("error");
         setError(signInError?.message ?? "CAPTCHA was rejected. Please try again.");
@@ -77,8 +88,16 @@ export function AnonymousSessionBootstrap({ children }: { children: React.ReactN
 
   const renderCaptcha = useCallback(async () => {
     if (!siteKey) {
+      if (canSkipCaptcha) {
+        await establishSession();
+        return;
+      }
       setStatus("error");
-      setError("CAPTCHA is not configured. Please try again later.");
+      setError(
+        isLocalDevelopment
+          ? "Local development requires Supabase at http://127.0.0.1:54321 when CAPTCHA is disabled."
+          : "CAPTCHA is not configured. Please try again later.",
+      );
       return;
     }
     if (widgetId.current) {
@@ -112,7 +131,7 @@ export function AnonymousSessionBootstrap({ children }: { children: React.ReactN
     } finally {
       if (version === initializationVersion.current) isRenderingCaptcha.current = false;
     }
-  }, [establishSession, resetCaptcha, siteKey]);
+  }, [canSkipCaptcha, establishSession, isLocalDevelopment, resetCaptcha, siteKey]);
 
   const checkSession = useCallback(async () => {
     setStatus("checking");
