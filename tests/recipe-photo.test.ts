@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getOwnedRecipePhotoPath, validateRecipePhoto } from "@/lib/recipe-photo";
+import { createRecipeImageIdentity, getOwnedRecipePhotoPath, validateRecipePhoto } from "@/lib/recipe-photo";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 
@@ -22,5 +22,12 @@ describe("recipe photo validation and ownership", () => {
     expect(getOwnedRecipePhotoPath("http://127.0.0.1:54321/storage/v1/object/public/recipe-photos/" + userId + "/old.webp", userId)).toBe(`${userId}/old.webp`);
     expect(getOwnedRecipePhotoPath("http://127.0.0.1:54321/storage/v1/object/public/recipe-photos/other/old.webp", userId)).toBeNull();
     expect(getOwnedRecipePhotoPath("https://evil.example/storage/v1/object/public/recipe-photos/" + userId + "/old.webp", userId)).toBeNull();
+    expect(getOwnedRecipePhotoPath("http://127.0.0.1:54321/storage/v1/object/public/recipe-photos/" + userId + "/recipe-1/asset-1.webp", userId)).toBe(`${userId}/recipe-1/asset-1.webp`);
+  });
+
+  it("generates one canonical owner/recipe/asset path shape", () => {
+    const identity = createRecipeImageIdentity(userId, "22222222-2222-4222-8222-222222222222", "image/png");
+    expect(identity.path).toMatch(new RegExp(`^${userId}/22222222-2222-4222-8222-222222222222/${identity.assetId}\\.png$`));
+    expect(createRecipeImageIdentity(userId, "recipe", "image/gif").error).toContain("JPEG");
   });
 });

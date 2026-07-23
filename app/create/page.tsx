@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAnonymousSession } from "@/components/auth/anonymous-session-bootstrap";
 import { createClient } from "@/lib/supabase/client";
 import { recipeMemoryFields, validateRecipeMemoryText } from "@/lib/recipe-memory-validation";
+import { createRecipeImageIdentity } from "@/lib/recipe-photo";
 
 const imageExtensions = {
   "image/jpeg": "jpg",
@@ -54,11 +55,21 @@ export default function CreatePage() {
     setErrors({});
     setStatus("Creating your memory…");
     const supabase = createClient();
+    const recipeMemoryId = crypto.randomUUID();
     let storagePath: string | undefined;
+    let assetId: string | undefined;
     let photoUrl: string | undefined;
 
     if (photo && extension) {
-      storagePath = `${userId}/${crypto.randomUUID()}.${extension}`;
+      const identity = createRecipeImageIdentity(userId, recipeMemoryId, photo.type);
+      if (!identity.path || !identity.assetId) {
+        isSubmittingRef.current = false;
+        setStatus("");
+        setErrors({ photo: "Use a JPEG, PNG, or WebP image." });
+        return;
+      }
+      storagePath = identity.path;
+      assetId = identity.assetId;
       const { error: uploadError } = await supabase.storage
         .from("recipe-photos")
         .upload(storagePath, photo, { contentType: photo.type });
@@ -75,7 +86,7 @@ export default function CreatePage() {
 
     const { data, error: insertError } = await supabase
       .from("recipe_memories")
-      .insert({ ...values, photo_url: photoUrl })
+      .insert({ id: recipeMemoryId, ...values, photo_url: photoUrl })
       .select("id")
       .single();
 
@@ -92,6 +103,24 @@ export default function CreatePage() {
       setStatus("");
       setErrors({ form: "We could not save your recipe memory. Please try again." });
       return;
+    }
+
+    if (storagePath && photoUrl && extension && assetId) {
+      const { error: assetError } = await supabase.from("recipe_assets").insert({
+        id: assetId,
+        recipe_memory_id: data.id,
+        asset_type: "image",
+        storage_bucket: "recipe-photos",
+        storage_path: storagePath,
+        mime_type: photo?.type ?? "image/" + extension,
+        byte_size: photo?.size ?? null,
+        display_order: 0,
+        is_cover: true,
+        processing_status: "ready",
+      });
+      if (assetError) {
+        console.warn("[recipe-memory/create] asset compatibility write failed", { memoryId: data.id });
+      }
     }
 
     setCreatedMemoryId(data.id);

@@ -4,14 +4,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getRecipeMemory: vi.fn(),
   updateRecipeMemory: vi.fn(),
+  deleteRecipeMemory: vi.fn(),
 }));
 
 vi.mock("@/lib/recipe-memories", () => ({ getRecipeMemory: mocks.getRecipeMemory }));
 vi.mock("./actions", () => ({ updateRecipeMemory: mocks.updateRecipeMemory }));
+vi.mock("./delete-action", () => ({ deleteRecipeMemory: mocks.deleteRecipeMemory }));
 vi.mock("next/navigation", () => ({ notFound: vi.fn(() => { throw new Error("NOT_FOUND"); }) }));
 
 import MemoryPage from "@/app/memory/[id]/page";
 import EditForm from "@/app/memory/[id]/edit/edit-form";
+import DeleteButton from "@/app/memory/[id]/delete-button";
 import { validateRecipeMemoryText } from "@/lib/recipe-memory-validation";
 
 const memory = {
@@ -29,6 +32,7 @@ describe("owner-aware memory controls", () => {
   beforeEach(() => {
     mocks.getRecipeMemory.mockReset();
     mocks.updateRecipeMemory.mockReset();
+    mocks.deleteRecipeMemory.mockReset();
     mocks.updateRecipeMemory.mockResolvedValue({ fieldErrors: { recipe_title: "This field is required." } });
   });
 
@@ -43,6 +47,27 @@ describe("owner-aware memory controls", () => {
     const nonOwnerPage = await MemoryPage({ params: Promise.resolve({ id: memory.id }) });
     render(nonOwnerPage);
     expect(screen.queryByRole("link", { name: "Edit memory" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete permanently" })).toBeNull();
+  });
+
+  it("shows a permanent delete control only to the verified owner", async () => {
+    mocks.getRecipeMemory.mockResolvedValue({ memory, error: null, user: { id: "user-a" }, isOwner: true });
+    const ownerPage = await MemoryPage({ params: Promise.resolve({ id: memory.id }) });
+    render(ownerPage);
+    expect(screen.getByRole("button", { name: "Delete permanently" })).toBeTruthy();
+
+    cleanup();
+    mocks.getRecipeMemory.mockResolvedValue({ memory, error: null, user: { id: "user-b" }, isOwner: false });
+    const nonOwnerPage = await MemoryPage({ params: Promise.resolve({ id: memory.id }) });
+    render(nonOwnerPage);
+    expect(screen.queryByRole("button", { name: "Delete permanently" })).toBeNull();
+  });
+
+  it("requires confirmation before submitting deletion", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<DeleteButton id={memory.id} />);
+    screen.getByRole("button", { name: "Delete permanently" }).click();
+    expect(mocks.deleteRecipeMemory).not.toHaveBeenCalled();
   });
 
   it("preserves existing values and centralizes required-field validation", () => {

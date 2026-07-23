@@ -9,7 +9,7 @@ import {
   type RecipeMemoryTextValues,
   validateRecipeMemoryText,
 } from "@/lib/recipe-memory-validation";
-import { getOwnedRecipePhotoPath, validateRecipePhoto } from "@/lib/recipe-photo";
+import { createRecipeImageIdentity, getOwnedRecipePhotoPath, validateRecipePhoto } from "@/lib/recipe-photo";
 
 export type EditMemoryState = {
   formError?: string;
@@ -53,8 +53,12 @@ export async function updateRecipeMemory(
 
   let newPath: string | undefined;
   let newPhotoUrl: string | undefined;
+  let newAssetId: string | undefined;
   if (replacement && extension) {
-    newPath = `${user.id}/${crypto.randomUUID()}.${extension}`;
+    const identity = createRecipeImageIdentity(user.id, id, replacement.type);
+    if (!identity.path || !identity.assetId) return { photoError: "Use a JPEG, PNG, or WebP image." };
+    newAssetId = identity.assetId;
+    newPath = identity.path;
     const { error: uploadError } = await supabase.storage.from("recipe-photos").upload(newPath, replacement, {
       contentType: replacement.type,
     });
@@ -62,13 +66,35 @@ export async function updateRecipeMemory(
     newPhotoUrl = supabase.storage.from("recipe-photos").getPublicUrl(newPath).data.publicUrl;
   }
 
-  const { data: updated, error: updateError } = await supabase
-    .from("recipe_memories")
-    .update(newPhotoUrl ? { ...values, photo_url: newPhotoUrl } : values)
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select("id")
-    .maybeSingle();
+  let updated: { id: string } | null = null;
+  let updateError: { message?: string } | null = null;
+  if (newPhotoUrl && newPath && newAssetId && replacement) {
+    const replacementResult = await supabase.rpc("replace_recipe_memory_cover_asset", {
+      p_recipe_memory_id: id,
+      p_asset_id: newAssetId,
+      p_storage_bucket: "recipe-photos",
+      p_storage_path: newPath,
+      p_public_url: newPhotoUrl,
+      p_mime_type: replacement.type,
+      p_byte_size: replacement.size,
+      p_recipe_title: values.recipe_title,
+      p_recipe_details: values.recipe_details,
+      p_memory_story: values.memory_story,
+      p_author_name: values.author_name,
+    });
+    updateError = replacementResult.error;
+    if (!updateError && replacementResult.data) updated = { id };
+  } else {
+    const result = await supabase
+      .from("recipe_memories")
+      .update(values)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select("id")
+      .maybeSingle();
+    updated = result.data;
+    updateError = result.error;
+  }
   if (updateError || !updated) {
     if (newPath) {
       const { error: cleanupError } = await supabase.storage.from("recipe-photos").remove([newPath]);

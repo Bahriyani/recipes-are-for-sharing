@@ -42,7 +42,7 @@ describe("CreatePage", () => {
     render(<CreatePage />); fillRequired();
     fireEvent.change(screen.getByLabelText("Photo"), { target: { files: [new File(["x"], "wrong.ext", { type: "image/png" })] } });
     fireEvent.submit(screen.getByRole("button"));
-    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith("user-a/object-id.png", expect.any(File), { contentType: "image/png" }));
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/^user-a\/[^/]+\/[^/]+\.png$/), expect.any(File), { contentType: "image/png" }));
     expect(mocks.insert).toHaveBeenCalledWith(expect.not.objectContaining({ user_id: expect.anything() }));
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/memory/uuid-1"));
     expect(screen.getByText("Open it now")).toBeTruthy();

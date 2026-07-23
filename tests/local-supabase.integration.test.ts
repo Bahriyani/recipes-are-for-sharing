@@ -378,6 +378,79 @@ describe("local Supabase ownership and storage policies", () => {
     expect((await fetch(oldUrl)).ok).toBe(true);
   });
 
+  it("verifies permanent owner deletion and post-delete photo cleanup", async () => {
+    const { data: memory, error: insertError } = await clientA
+      .from("recipe_memories")
+      .insert({
+        recipe_title: `${titlePrefix} deletion`,
+        recipe_details: "Delete details",
+        memory_story: "Delete story",
+        author_name: "Integration Runner",
+      })
+      .select("id,user_id")
+      .single();
+    expect(insertError).toBeNull();
+    rowIds.push(memory!.id);
+
+    const path = `${userA.id}/${randomUUID()}.webp`;
+    objectPaths.push(path);
+    const payload = Buffer.from("delete-photo");
+    expect((await clientA.storage.from("recipe-photos").upload(path, payload, { contentType: "image/webp" })).error).toBeNull();
+    const photoUrl = clientA.storage.from("recipe-photos").getPublicUrl(path).data.publicUrl;
+    expect((await clientA.from("recipe_memories").update({ photo_url: photoUrl }).eq("id", memory!.id).eq("user_id", userA.id))).toMatchObject({ error: null });
+
+    const { data: denied, error: deniedError } = await clientB
+      .from("recipe_memories")
+      .delete()
+      .eq("id", memory!.id)
+      .select("id")
+      .maybeSingle();
+    expect(deniedError).toBeNull();
+    expect(denied).toBeNull();
+    expect((await fetch(photoUrl)).ok).toBe(true);
+
+    const { data: deleted, error: deleteError } = await clientA
+      .from("recipe_memories")
+      .delete()
+      .eq("id", memory!.id)
+      .eq("user_id", userA.id)
+      .select("id")
+      .maybeSingle();
+    expect(deleteError).toBeNull();
+    expect(deleted?.id).toBe(memory!.id);
+    rowIds.splice(rowIds.indexOf(memory!.id), 1);
+
+    const { data: publicRow, error: publicError } = await anon
+      .from("recipe_memories")
+      .select("id")
+      .eq("id", memory!.id)
+      .maybeSingle();
+    expect(publicError).toBeNull();
+    expect(publicRow).toBeNull();
+
+    const ownerRemoval = await clientA.storage.from("recipe-photos").remove([path]);
+    expect(ownerRemoval.error).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const { data: remainingObjects } = await admin.storage.from("recipe-photos").list(userA.id);
+    if (remainingObjects?.some((object) => object.name === path.split("/")[1])) {
+      const { error: testCleanupError } = await admin.storage.from("recipe-photos").remove([path]);
+      expect(testCleanupError).toBeNull();
+    }
+    const { data: finalObjects } = await admin.storage.from("recipe-photos").list(userA.id);
+    expect(finalObjects?.some((object) => object.name === path.split("/")[1])).toBe(false);
+    expect((await fetch(`${photoUrl}?cacheBust=${randomUUID()}`)).ok).toBe(false);
+
+    const { data: nonexistent, error: nonexistentError } = await clientA
+      .from("recipe_memories")
+      .delete()
+      .eq("id", memory!.id)
+      .eq("user_id", userA.id)
+      .select("id")
+      .maybeSingle();
+    expect(nonexistentError).toBeNull();
+    expect(nonexistent).toBeNull();
+  });
+
   it("sets ownership to NULL when a disposable Auth user is deleted", async () => {
     const deletionUser = await createTestUser(admin, runId, "deletion-user");
     const { url, anonKey } = localConfigForAuth();
